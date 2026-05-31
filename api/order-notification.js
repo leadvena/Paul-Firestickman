@@ -1,26 +1,81 @@
+// Setup strong static security headers manually for the serverless response
+function setSecurityHeaders(res) {
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Content-Security-Policy", "default-src 'self' https:;");
+}
+
+// Simple in-memory rate limiter for serverless environment nodes
+const trackerLimits = new Map();
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 mins
+const MAX_REQ_PER_WINDOW = 5;
+
+// Strict string sanitizer
+const sanitizeHTML = (text, maxLength = 800) => {
+  if (typeof text !== "string") return "";
+  return text
+    .trim()
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;")
+    .replace(/\//g, "&#x2F;")
+    .substring(0, maxLength);
+};
+
 export default async function handler(req, res) {
+  setSecurityHeaders(res);
+
   // Only allow POST actions
   if (req.method !== "POST") {
     return res.status(405).json({ success: false, error: "Method not allowed. Use POST." });
   }
 
   try {
-    const {
-      fullName,
-      email,
-      phone,
-      streetAddress,
-      city,
-      postcode,
-      packageType,
-      specialInstructions,
-    } = req.body;
+    // 1. IP Rate Limiting
+    const clientIp = req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "unknown";
+    const now = Date.now();
+    let timestamps = trackerLimits.get(clientIp) || [];
+    timestamps = timestamps.filter(ts => now - ts < RATE_LIMIT_WINDOW_MS);
 
-    // Validate inputs
+    if (timestamps.length >= MAX_REQ_PER_WINDOW) {
+      console.warn(`🛑 Serverless rate limit triggered for client ${clientIp}`);
+      return res.status(429).json({
+        success: false,
+        error: "Rate limit exceeded. Please wait a few minutes before submitting another order request.",
+      });
+    }
+
+    timestamps.push(now);
+    trackerLimits.set(clientIp, timestamps);
+
+    // 2. Extract and sanitize inputs to defend against HTML email client XSS injections
+    const fullName = sanitizeHTML(req.body.fullName, 120);
+    const email = sanitizeHTML(req.body.email, 150);
+    const phone = sanitizeHTML(req.body.phone, 50);
+    const streetAddress = sanitizeHTML(req.body.streetAddress, 250);
+    const city = sanitizeHTML(req.body.city, 120);
+    const postcode = sanitizeHTML(req.body.postcode, 30);
+    const packageType = sanitizeHTML(req.body.packageType, 200);
+    const specialInstructions = sanitizeHTML(req.body.specialInstructions, 1500);
+
+    // 3. Strict validations
     if (!fullName || !email || !phone || !packageType) {
       return res.status(400).json({
         success: false,
-        error: "Missing required fields (fullName, email, phone, packageType)",
+        error: "Required fields are empty or invalid. Please check your submission data.",
+      });
+    }
+
+    // Structure validation for email format
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(email)) {
+      return res.status(400).json({
+        success: false,
+        error: "The email address supplied is formatted incorrectly.",
       });
     }
 

@@ -10,28 +10,86 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Body parser for JSON orders
-  app.use(express.json());
+  // Add strong security headers to protect against common web attacks/vulnerabilities
+  app.use((req, res, next) => {
+    res.setHeader("X-Frame-Options", "DENY"); // Mitigate clickjacking of application pages
+    res.setHeader("X-Content-Type-Options", "nosniff"); // Mitigate MIME-sniffing
+    res.setHeader("X-XSS-Protection", "1; mode=block"); // Prompt browser to block reflected XSS
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin"); // Safely pass referrers
+    res.setHeader("Content-Security-Policy", "default-src 'self' https: data:; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https:;"); // Secure Content Security Policy
+    res.removeHeader("X-Powered-By"); // Remove header describing running technology node to limit reconnaissance
+    next();
+  });
+
+  // Limit JSON body size to prevent Buffer / Memory allocation exhaustion DOS vectors
+  app.use(express.json({ limit: "15kb" }));
+
+  // Pure server-side in-memory rate limiting mechanism to block API flood & quota exhaustion
+  const trackerLimits = new Map<string, number[]>();
+  const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes window
+  const MAX_REQ_PER_WINDOW = 5; // Allow a maximum of 5 submissions per IP every 15 minutes
+
+  // Helper function to validate and sanitize form field inputs (defends against embedded scripts running in recipient email clients)
+  const sanitizeHTML = (text: any, maxLength = 800): string => {
+    if (typeof text !== "string") return "";
+    return text
+      .trim()
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#x27;")
+      .replace(/\//g, "&#x2F;")
+      .substring(0, maxLength);
+  };
 
   // Backend API route for order email notifications
   app.post("/api/order-notification", async (req, res) => {
     try {
-      const {
-        fullName,
-        email,
-        phone,
-        streetAddress,
-        city,
-        postcode,
-        packageType,
-        specialInstructions,
-      } = req.body;
+      // 1. IP Rate Limiting Check
+      const clientIp = (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "unknown") as string;
+      const now = Date.now();
+      
+      let timestamps = trackerLimits.get(clientIp) || [];
+      // Filter out timestamps older than the rate limit window
+      timestamps = timestamps.filter(ts => now - ts < RATE_LIMIT_WINDOW_MS);
+      
+      if (timestamps.length >= MAX_REQ_PER_WINDOW) {
+        console.warn(`🛑 Rate limit triggered for IP address ${clientIp}`);
+        return res.status(429).json({
+          success: false,
+          error: "Rate limit exceeded. Please wait a few minutes before submitting another order request.",
+        });
+      }
+      
+      // Update and save the timestamps array
+      timestamps.push(now);
+      trackerLimits.set(clientIp, timestamps);
 
-      // Validate required fields
+      // 2. Extract and Sanitize Fields (ensures no unescaped strings flow downstream)
+      const fullName = sanitizeHTML(req.body.fullName, 120);
+      const email = sanitizeHTML(req.body.email, 150);
+      const phone = sanitizeHTML(req.body.phone, 50);
+      const streetAddress = sanitizeHTML(req.body.streetAddress, 250);
+      const city = sanitizeHTML(req.body.city, 120);
+      const postcode = sanitizeHTML(req.body.postcode, 30);
+      const packageType = sanitizeHTML(req.body.packageType, 200);
+      const specialInstructions = sanitizeHTML(req.body.specialInstructions, 1500);
+
+      // 3. Strict Parameter Constraints & Field Validation checks
       if (!fullName || !email || !phone || !packageType) {
         return res.status(400).json({
           success: false,
-          error: "Missing required fields (fullName, email, phone, packageType)",
+          error: "Required fields are empty or invalid. Please check your submission data.",
+        });
+      }
+
+      // Basic structure validation for email addresses to block format abuses
+      const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailPattern.test(email)) {
+        return res.status(400).json({
+          success: false,
+          error: "The email address supplied is formatted incorrectly.",
         });
       }
 
