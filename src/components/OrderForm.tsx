@@ -73,25 +73,44 @@ export default function OrderForm({ selectedPackage, setSelectedPackage }: Order
         body: JSON.stringify(formData),
       });
 
+      // Read the response as raw text first so we can securely log and inspect it before parsing
+      const rawBody = await response.text();
+      console.log('--- API RESPONSE DEBUG ---');
+      console.log('Status Code:', response.status);
+      console.log('Content-Type Header:', response.headers.get('content-type'));
+      console.log('Raw Response Body Content:\n', rawBody);
+      console.log('---------------------------');
+
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
-        const resData = await response.json();
-        if (response.ok && resData.success) {
-          if (resData.status === 'simulated') {
-            setEmailStatus('simulated');
-            setEmailMessage(resData.message || '');
+        try {
+          const resData = JSON.parse(rawBody);
+          if (response.ok && resData.success) {
+            if (resData.status === 'simulated') {
+              setEmailStatus('simulated');
+              setEmailMessage(resData.message || '');
+            } else {
+              setEmailStatus('success');
+            }
           } else {
-            setEmailStatus('success');
+            setEmailStatus('error');
+            setEmailMessage(resData?.details || resData?.error || 'Failed to dispatch email notification.');
           }
-        } else {
-          setEmailStatus('error');
-          setEmailMessage(resData?.details || resData?.error || 'Failed to dispatch email notification.');
+        } catch (parseError: any) {
+          console.error('Failed to parse response body as JSON:', parseError);
+          throw new Error(`Invalid JSON payload format received from API: ${parseError.message}`);
         }
       } else {
-        // Backend did not respond with JSON. This is typical on static-only hosts like Vercel Standard SPA setups.
-        throw new Error(
-          'API returned a non-JSON response. (If deployed as a static-only SPA like Vercel, the server.ts Express backend is not running. Please deploy to full-stack hosting like Cloud Run to run the backend emailing service).'
-        );
+        // Safe check to see if the static hosting platform outputted index.html fallback code
+        if (rawBody.trim().startsWith('<!DOCTYPE') || rawBody.trim().startsWith('<html')) {
+          throw new Error(
+            'API returned an HTML document. (Vercel is hosting this as a static-only SPA, meaning the Express backend server [server.ts] is not executing. Please run or deploy this application on a full-stack runtime like Cloud Run on AI Studio to enable the active emailing script).'
+          );
+        } else {
+          throw new Error(
+            `API returned a non-JSON response (Status: ${response.status}). Response preview: ${rawBody.substring(0, 120)}...`
+          );
+        }
       }
     } catch (err: any) {
       console.error('Mailing dispatch failed:', err);
