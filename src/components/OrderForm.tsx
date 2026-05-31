@@ -73,17 +73,25 @@ export default function OrderForm({ selectedPackage, setSelectedPackage }: Order
         body: JSON.stringify(formData),
       });
 
-      const resData = await response.json();
-      if (response.ok && resData.success) {
-        if (resData.status === 'simulated') {
-          setEmailStatus('simulated');
-          setEmailMessage(resData.message || '');
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const resData = await response.json();
+        if (response.ok && resData.success) {
+          if (resData.status === 'simulated') {
+            setEmailStatus('simulated');
+            setEmailMessage(resData.message || '');
+          } else {
+            setEmailStatus('success');
+          }
         } else {
-          setEmailStatus('success');
+          setEmailStatus('error');
+          setEmailMessage(resData?.details || resData?.error || 'Failed to dispatch email notification.');
         }
       } else {
-        setEmailStatus('error');
-        setEmailMessage(resData.details || resData.error || 'Failed to dispatch email notification.');
+        // Backend did not respond with JSON. This is typical on static-only hosts like Vercel Standard SPA setups.
+        throw new Error(
+          'API returned a non-JSON response. (If deployed as a static-only SPA like Vercel, the server.ts Express backend is not running. Please deploy to full-stack hosting like Cloud Run to run the backend emailing service).'
+        );
       }
     } catch (err: any) {
       console.error('Mailing dispatch failed:', err);
