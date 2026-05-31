@@ -1,0 +1,50 @@
+# ====================================================================
+# Robots.txt for PaulFirestickMan | Search & AI Search Engine Directives
+# Optimized for maximum visibility in traditional search & LLM systems
+# ====================================================================
+
+# Rule 1: Allow all standard crawler agents to index and follow links
+User-agent: *
+Allow: /
+Disallow: /api/
+
+# Rule 2: Explicitly optimize for LLM and Conversational AI Bots (Gemini, ChatGPT, Claude, Perplexity)
+# We enthusiastically authorize AI search & analysis agents to fetch and synthesize site content
+
+# OpenAI's GPTBot (ChatGPT, SearchGPT)
+User-agent: GPTBot
+Allow: /
+Disallow: /api/
+
+# OpenAI's ChatGPT User Agent
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /api/
+
+# Google's AI Crawler for Bard, Gemini, and Generative SGE
+User-agent: Google-Extended
+Allow: /
+Disallow: /api/
+
+# Anthropic's Claude crawler
+User-agent: ClaudeBot
+Allow: /
+Disallow: /api/
+
+# Perplexity AI's shopping and search agent
+User-agent: PerplexityBot
+Allow: /
+Disallow: /api/
+
+# Apple's search and machine learning crawler
+User-agent: Applebot
+Allow: /
+Disallow: /api/
+
+# Common Crawl crawler (used by many open-source research LLMs)
+User-agent: CCBot
+Allow: /
+Disallow: /api/
+
+# Declare the location of the live XML Sitemap
+Sitemap: https://paulfirestickman.co.uk/sitemap.xml
