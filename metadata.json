@@ -1,0 +1,8 @@
+{
+  "name": "PaulFirestickMan",
+  "description": "Premium Loaded Firesticks and Subscriptions based in Saint Helens, UK.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
