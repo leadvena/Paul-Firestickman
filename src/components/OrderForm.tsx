@@ -24,6 +24,11 @@ export default function OrderForm({ selectedPackage, setSelectedPackage }: Order
   const [formattedMsg, setFormattedMsg] = useState('');
   const [copied, setCopied] = useState(false);
 
+  // Email Notification States
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'success' | 'error' | 'simulated'>('idle');
+  const [emailMessage, setEmailMessage] = useState('');
+
   // Sync state when selectedPackage changes from parent
   useEffect(() => {
     if (selectedPackage) {
@@ -41,7 +46,7 @@ export default function OrderForm({ selectedPackage, setSelectedPackage }: Order
     }
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
     const addressStr = `${formData.streetAddress}, ${formData.city}, ${formData.postcode}`;
@@ -55,6 +60,38 @@ export default function OrderForm({ selectedPackage, setSelectedPackage }: Order
     setFormattedMsg(rawMessage);
     setRedirectUrl(mUrl);
     setSubmitted(true);
+
+    // Proceed to dispatch the email log to the backend
+    setIsSendingEmail(true);
+    setEmailStatus('idle');
+    try {
+      const response = await fetch('/api/order-notification', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+
+      const resData = await response.json();
+      if (response.ok && resData.success) {
+        if (resData.status === 'simulated') {
+          setEmailStatus('simulated');
+          setEmailMessage(resData.message || '');
+        } else {
+          setEmailStatus('success');
+        }
+      } else {
+        setEmailStatus('error');
+        setEmailMessage(resData.details || resData.error || 'Failed to dispatch email notification.');
+      }
+    } catch (err: any) {
+      console.error('Mailing dispatch failed:', err);
+      setEmailStatus('error');
+      setEmailMessage(err?.message || 'Network error linking to backend script.');
+    } finally {
+      setIsSendingEmail(false);
+    }
 
     // Attempt an immediate open just in case browser context allows it
     try {
@@ -72,6 +109,8 @@ export default function OrderForm({ selectedPackage, setSelectedPackage }: Order
 
   const handleReset = () => {
     setSubmitted(false);
+    setEmailStatus('idle');
+    setEmailMessage('');
     setFormData({
       fullName: '',
       email: '',
@@ -283,9 +322,52 @@ export default function OrderForm({ selectedPackage, setSelectedPackage }: Order
               <h2 className="font-heading text-3xl font-extrabold text-white mb-2 uppercase tracking-wide">
                 Order Structured on Site!
               </h2>
-              <p className="text-[#a0a0a0] text-sm max-w-md mx-auto mb-8">
+              <p className="text-[#a0a0a0] text-sm max-w-md mx-auto mb-6">
                 Your order description is compiled. To complete your purchase and authorize payment with Paul, click the big orange button below to send your details over Facebook Messenger.
               </p>
+
+              {/* Email Backup Services Logger alert box */}
+              <div className="max-w-md mx-auto mb-6 text-left text-xs text-white/90">
+                {isSendingEmail && (
+                  <div className="rounded-xl bg-orange-500/5 border border-orange-500/10 p-3.5 flex items-center gap-3 animate-pulse">
+                    <div className="h-4 w-4 rounded-full border-2 border-dashed border-[#FF6B00] animate-spin shrink-0" />
+                    <div>
+                      <span className="font-bold text-[#FF6B00] block">Syncing order record...</span>
+                      <span className="text-white/60">Emailing dispatch copy directly to Paul's workspace.</span>
+                    </div>
+                  </div>
+                )}
+
+                {emailStatus === 'success' && (
+                  <div className="rounded-xl bg-green-500/5 border border-green-500/20 p-3.5 flex items-start gap-3">
+                    <div className="h-5 w-5 rounded-full bg-green-500/10 text-green-400 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">✓</div>
+                    <div>
+                      <span className="font-bold text-green-400 block">Record Emailed Successfully</span>
+                      <span className="text-white/60">Paul has received an automated email copy of your transaction requirements!</span>
+                    </div>
+                  </div>
+                )}
+
+                {emailStatus === 'simulated' && (
+                  <div className="rounded-xl bg-blue-500/5 border border-blue-500/20 p-3.5 flex items-start gap-3">
+                    <div className="h-5 w-5 rounded-full bg-blue-500/10 text-blue-400 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">ℹ</div>
+                    <div>
+                      <span className="font-bold text-blue-400 block">Transaction Log Simulating</span>
+                      <span className="text-white/60">{emailMessage || 'Simulated mail dispatch successfully compiled!'}</span>
+                    </div>
+                  </div>
+                )}
+
+                {emailStatus === 'error' && (
+                  <div className="rounded-xl bg-red-500/5 border border-red-500/20 p-3.5 flex items-start gap-3">
+                    <div className="h-5 w-5 rounded-full bg-red-500/10 text-red-400 flex items-center justify-center font-sans font-bold text-xs shrink-0 mt-0.5">!</div>
+                    <div>
+                      <span className="font-bold text-red-400 block">Record Log Warning</span>
+                      <span className="text-white/60">{emailMessage || 'Trouble connecting backup script.'}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* MESSENGER BUTTON */}
               <div className="space-y-4 max-w-md mx-auto">
