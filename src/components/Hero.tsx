@@ -110,7 +110,7 @@ export default function Hero() {
             <div className="relative mx-auto max-w-md lg:max-w-none overflow-hidden rounded-2xl border border-white/10 bg-[#141414] p-2 shadow-2xl shadow-[#FF6B00]/5">
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent z-10" />
               <img
-                src="/src/assets/images/firestick_setup_1780205436173.png"
+                src="/firestick_setup.png"
                 alt="Paul's Loaded Firestick TV Setup"
                 referrerPolicy="no-referrer"
                 className="w-full object-cover aspect-[4/3] rounded-xl hover:scale-105 transition-transform duration-700"

@@ -14,7 +14,7 @@ export default function Header() {
         {/* LOGO AREA */}
         <div className="flex items-center gap-2.5">
           <img
-            src="public/logo.png"
+            src="/logo.png"
             alt="PaulFirestickMan Logo"
             className="h-14 w-14 object-contain shrink-0"
             referrerPolicy="no-referrer"
